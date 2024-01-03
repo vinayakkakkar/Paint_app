@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paint App with Line Drawing</title>
+  <style>
+body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 20px;
+    }
+
+    h2 {
+      color: #333;
+    }
+
+    canvas {
+      border: 2px solid #000;
+      cursor: crosshair;
+    }
+
+    #clearButton {
+      margin-top: 10px;
+      padding: 8px 16px;
+      font-size: 16px;
+      border: none;
+      cursor: pointer;
+      border-radius: 4px;
+      background-color: #e74c3c;
+      color: #fff;
+    }
+
+    #message {
+      margin-top: 10px;
+      color: red;
+    }
+  </style>
+  </head>
+
+<body>
+  <h2>Paint App with Line Drawing</h2>
+  <canvas id="paintCanvas" width="800" height="500"></canvas>
+  <button id="clearButton">Clear</button>
+  <div id="message"></div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const canvas = document.getElementById("paintCanvas");
+      const context = canvas.getContext("2d");
+      const clearButton = document.getElementById("clearButton");
+      const messageDiv = document.getElementById("message");
+      let isDrawing = false;
+      let shapes = [];
+
+      canvas.addEventListener("mousedown", startDrawing);
+      canvas.addEventListener("mouseup", stopDrawing);
+      canvas.addEventListener("mousemove", draw);
+      canvas.addEventListener("click", checkHit);
+      canvas.addEventListener("dblclick", checkDoubleHit);
+      clearButton.addEventListener("click", clearCanvas);
+
+      function startDrawing(e) {
+        isDrawing = true;
+
+        const { clientX, clientY } = e;
+        const startX = clientX - canvas.offsetLeft;
+        const startY = clientY - canvas.offsetTop;
+
+        if (e.shiftKey) {
+          shapes.push({
+            type: "line",
+            start: { x: startX, y: startY },
+            end: { x: startX, y: startY },
+            color: getRandomColor(),
+          });
+        } else {
+          shapes.push({
+            type: "circle",
+            start: { x: startX, y: startY },
+            radius: 0,
+            color: getRandomColor(),
+          });
+        }
+      }
+
+      function draw(e) {
+        if (!isDrawing) return;
+
+        const { clientX, clientY } = e;
+        const currentX = clientX - canvas.offsetLeft;
+        const currentY = clientY - canvas.offsetTop;
+        const currentShape = shapes[shapes.length - 1];
+
+        if (currentShape.type === "line") {
+          currentShape.end = { x: currentX, y: currentY };
+        } else {
+          currentShape.radius = Math.sqrt((currentX - currentShape.start.x) ** 2 + (currentY - currentShape.start.y) ** 2);
+        }
+
+        redraw();
+      }
+
+      function drawLine(x1, y1, x2, y2, color) {
+        context.beginPath();
+        context.moveTo(x1, y1);
+        context.lineTo(x2, y2);
+        context.strokeStyle = color;
+        context.stroke();
+      }
+
+      function drawCircle(x, y, radius, color) {
+        context.beginPath();
+        context.arc(x, y, radius, 0, 2 * Math.PI);
+        context.strokeStyle = color;
+        context.stroke();
+        context.fillStyle = color;
+        context.fill();
+      }
+
+      function redraw() {
+        context.clearRect(0, 0, canvas.width, canvas.height);
+
+        shapes.forEach(shape => {
+          if (shape.type === "line") {
+            drawLine(shape.start.x, shape.start.y, shape.end.x, shape.end.y, shape.color);
+          } else {
+            drawCircle(shape.start.x, shape.start.y, shape.radius, shape.color);
+          }
+        });
+
+        setMessage("");
+      }
+
+      function stopDrawing() {
+        isDrawing = false;
+      }
+
+      function checkHit(e) {
+        const { clientX, clientY } = e;
+        const clickX = clientX - canvas.offsetLeft;
+        const clickY = clientY - canvas.offsetTop;
+        let hit = false;
+
+        for (let i = shapes.length - 1; i >= 0; i--) {
+          const shape = shapes[i];
+
+          if (shape.type === "circle") {
+            context.beginPath();
+            context.arc(shape.start.x, shape.start.y, shape.radius, 0, 2 * Math.PI);
+
+            if (context.isPointInPath(clickX, clickY)) {
+              hit = true;
+              break;
+            }
+          }
+        }
+
+        setMessage(hit ? "Hit!" : "Miss!");
+      }
+
+      function checkDoubleHit(e) {
+        const { clientX, clientY } = e;
+        const doubleClickX = clientX - canvas.offsetLeft;
+        const doubleClickY = clientY - canvas.offsetTop;
+
+        let doubleHit = false;
+
+        for (let i = shapes.length - 1; i >= 0; i--) {
+          const shape = shapes[i];
+
+          if (shape.type === "circle") {
+            context.beginPath();
+            context.arc(shape.start.x, shape.start.y, shape.radius, 0, 2 * Math.PI);
+
+            if (context.isPointInPath(doubleClickX, doubleClickY)) {
+              shapes.splice(i, 1);
+              doubleHit = true;
+              redraw();
+              setMessage("Deleted!");
+              break;
+            }
+          } else if (shape.type === "line") {
+            const { start, end } = shape;
+            const dist = pointToLineDistance(doubleClickX, doubleClickY, start.x, start.y, end.x, end.y);
+
+            if (dist < 5) {
+              shapes.splice(i, 1);
+              doubleHit = true;
+              redraw();
+              setMessage("Deleted!");
+              break;
+            }
+          }
+        }
+        if (!doubleHit) {
+          isDrawing = true;
+          startDrawing(e);
+        }
+      }
+
+      function pointToLineDistance(px, py, x1, y1, x2, y2) {
+        const A = px - x1;
+        const B = py - y1;
+        const C = x2 - x1;
+        const D = y2 - y1;
+
+        const dot = A * C + B * D;
+        const lenSq = C * C + D * D;
+        let param = -1;
+
+        if (lenSq !== 0) {
+          param = dot / lenSq;
+        }
+
+        let xx, yy;
+
+        if (param < 0) {
+          xx = x1;
+          yy = y1;
+        } else if (param > 1) {
+          xx = x2;
+          yy = y2;
+        } else {
+          xx = x1 + param * C;
+          yy = y1 + param * D;
+        }
+
+        const dx = px - xx;
+        const dy = py - yy;
+        return Math.sqrt(dx * dx + dy * dy);
+      }
+
+      function setMessage(msg) {
+        messageDiv.textContent = msg;
+        setTimeout(() => {
+          messageDiv.textContent = "";
+        }, 2000);
+      }
+
+      function clearCanvas() {
+        shapes = [];
+        redraw();
+        setMessage("Canvas Cleared!");
+      }
+
+      function getRandomColor() {
+        const letters = "0123456789ABCDEF";
+        let color = "#";
+        for (let i = 0; i < 6; i++) {
+          color += letters[Math.floor(Math.random() * 16)];
+        }
+        return color;
+      }
+    });
+  </script>
+</body>
